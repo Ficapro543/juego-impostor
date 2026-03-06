@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Juego del Impostor</title>
+
+<style>
+body{
+font-family:Arial;
+text-align:center;
+margin-top:40px;
+background:#f2f2f2;
+}
+
+button{
+padding:10px 20px;
+font-size:16px;
+margin:10px;
+cursor:pointer;
+}
+
+input{
+padding:8px;
+font-size:16px;
+margin:5px;
+}
+
+.card{
+margin-top:30px;
+font-size:28px;
+font-weight:bold;
+}
+
+.players{
+margin-top:20px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>🕵️ Juego del Impostor</h1>
+
+<div id="menu">
+
+<input id="name" placeholder="Tu nombre">
+
+<br>
+
+<button onclick="createRoom()">Crear sala</button>
+
+<br>
+
+<input id="roomInput" placeholder="Código de sala">
+
+<button onclick="joinRoom()">Entrar</button>
+
+</div>
+
+<div id="room" style="display:none">
+
+<h2>Sala: <span id="roomCode"></span></h2>
+
+<div class="players">
+<h3>Jugadores</h3>
+<ul id="playerList"></ul>
+</div>
+
+<button id="startBtn" onclick="startGame()">Iniciar partida</button>
+
+<div class="card" id="role"></div>
+
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, set, push, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA4AJCLIHdr8vDrPmCc_eqYRZA2aRErQ5o",
+  authDomain: "juego-impostor-7a9a2.firebaseapp.com",
+  databaseURL: "https://juego-impostor-7a9a2-default-rtdb.firebaseio.com",
+  projectId: "juego-impostor-7a9a2",
+  storageBucket: "juego-impostor-7a9a2.firebasestorage.app",
+  messagingSenderId: "111473209147",
+  appId: "1:111473209147:web:081a1dba06833ee151d11e",
+  measurementId: "G-TZHNSLEPC5"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+let roomCode = ""
+let playerId = ""
+let playerName = ""
+
+window.createRoom = async function(){
+
+playerName = document.getElementById("name").value
+
+if(!playerName) return alert("Pon tu nombre")
+
+roomCode = Math.floor(1000 + Math.random()*9000)
+
+playerId = Date.now()
+
+await set(ref(db, "rooms/"+roomCode+"/players/"+playerId),{
+name:playerName
+})
+
+enterRoom()
+
+}
+
+window.joinRoom = async function(){
+
+playerName = document.getElementById("name").value
+roomCode = document.getElementById("roomInput").value
+
+if(!playerName || !roomCode) return alert("Completa datos")
+
+playerId = Date.now()
+
+await set(ref(db,"rooms/"+roomCode+"/players/"+playerId),{
+name:playerName
+})
+
+enterRoom()
+
+}
+
+function enterRoom(){
+
+document.getElementById("menu").style.display="none"
+document.getElementById("room").style.display="block"
+
+document.getElementById("roomCode").innerText=roomCode
+
+const playersRef = ref(db,"rooms/"+roomCode+"/players")
+
+onValue(playersRef,(snapshot)=>{
+
+const players = snapshot.val()
+
+const list = document.getElementById("playerList")
+
+list.innerHTML=""
+
+for(const id in players){
+
+const li=document.createElement("li")
+li.innerText=players[id].name
+list.appendChild(li)
+
+}
+
+})
+
+/* escuchar el rol del jugador */
+
+const roleRef = ref(db,"rooms/"+roomCode+"/roles/"+playerId)
+
+onValue(roleRef,(snapshot)=>{
+
+const data = snapshot.val()
+
+if(!data) return
+
+if(data.role=="impostor"){
+
+document.getElementById("role").innerText="⚠️ ERES EL IMPOSTOR"
+
+}else{
+
+document.getElementById("role").innerText="Tu palabra: "+data.word
+
+}
+
+})
+
+}
+
+window.startGame = async function(){
+
+const playersSnap = await get(ref(db,"rooms/"+roomCode+"/players"))
+
+const players = playersSnap.val()
+
+const ids = Object.keys(players)
+
+const impostorIndex = Math.floor(Math.random()*ids.length)
+
+const wordList = ["Pizza","Hospital","Perro","Computadora","Amazonas","Avión"]
+
+const word = wordList[Math.floor(Math.random()*wordList.length)]
+
+for(let i=0;i<ids.length;i++){
+
+let role = "word"
+
+if(i==impostorIndex) role="impostor"
+
+await set(ref(db,"rooms/"+roomCode+"/roles/"+ids[i]),{
+
+role:role,
+word:word
+
+})
+
+}
+
+}
+
+const roleRef = ref(db,"rooms/"+roomCode+"/roles/"+playerId)
+
+onValue(roleRef,(snapshot)=>{
+
+const data = snapshot.val()
+
+if(!data) return
+
+if(data.role=="impostor"){
+
+document.getElementById("role").innerText="⚠️ ERES EL IMPOSTOR"
+
+}else{
+
+document.getElementById("role").innerText="Tu palabra: "+data.word
+
+}
+
+})
+
+</script>
+
+</body>
+</html>
