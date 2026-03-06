@@ -68,6 +68,11 @@ margin-top:20px;
 <ul id="playerList"></ul>
 </div>
 
+<div id="turns" style="display:none;margin-top:20px;">
+<h3>Orden de Turnos</h3>
+<ol id="turnsList"></ol>
+</div>
+
 <button id="startBtn" onclick="startGame()">Iniciar partida</button>
 
 <div class="card" id="role"></div>
@@ -93,18 +98,18 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-// Arreglo constante de palabras con pistas
+// Arreglo constante de palabras psicológicas con pistas
 const words = [
-  { word: "Pizza", hints: ["Italiana", "Queso"] },
-  { word: "Hospital", hints: ["Enfermos", "Doctores"] },
-  { word: "Perro", hints: ["Animal", "Mascota"] },
-  { word: "Computadora", hints: ["Tecnología", "Pantalla"] },
-  { word: "Amazonas", hints: ["Río", "Selva"] },
-  { word: "Avión", hints: ["Volar", "Aeropuerto"] },
-  { word: "Escuela", hints: ["Estudiar", "Profesores"] },
-  { word: "Playa", hints: ["Arena", "Mar"] },
-  { word: "Montaña", hints: ["Altura", "Nieve"] },
-  { word: "Coche", hints: ["Ruedas", "Carretera"] }
+  { word: "Justicia", hints: ["Legal", "Derecho"] },
+  { word: "Confianza", hints: ["Relación", "Seguridad"] },
+  { word: "Miedo", hints: ["Emoción", "Pánico"] },
+  { word: "Secreto", hints: ["Oculto", "Privado"] },
+  { word: "Verdad", hints: ["Honestidad", "Realidad"] },
+  { word: "Mentira", hints: ["Engaño", "Falsedad"] },
+  { word: "Poder", hints: ["Control", "Dominio"] },
+  { word: "Libertad", hints: ["Independencia", "Autonomía"] },
+  { word: "Sacrificio", hints: ["Renuncia", "Entrega"] },
+  { word: "Traición", hints: ["Deslealtad", "Engaño"] }
 ];
 
 // Función para barajar arreglo
@@ -203,13 +208,41 @@ if(!data) return
 
 if(data.role=="impostor"){
 
-document.getElementById("role").innerText="⚠️ ERES EL IMPOSTOR\nPistas: " + data.hints.join(", ")
+const clueText = data.hints && data.hints.length > 0 ? "\nPistas (" + data.numClues + "): " + data.hints.join(", ") : "\nNo tienes pistas"
+document.getElementById("role").innerText="⚠️ ERES EL IMPOSTOR\nTurno: " + data.turn + " de " + data.totalPlayers + clueText
 
 }else{
 
-document.getElementById("role").innerText="Tu palabra: "+data.word
+document.getElementById("role").innerText="Tu palabra: "+data.word + "\nTurno: " + data.turn + " de " + data.totalPlayers
 
 }
+
+})
+
+// Escuchar los turnos
+const turnsRef = ref(db,"rooms/"+roomCode+"/turns")
+
+onValue(turnsRef, async (snapshot)=>{
+
+const turns = snapshot.val()
+
+if(!turns) return
+
+const turnsList = document.getElementById("turnsList")
+turnsList.innerHTML=""
+
+const playersSnap = await get(ref(db,"rooms/"+roomCode+"/players"))
+const players = playersSnap.val()
+
+const turnsArray = Object.keys(turns).map(pId => ({ id: pId, turn: turns[pId] })).sort((a,b) => a.turn - b.turn)
+
+for(const item of turnsArray){
+const li=document.createElement("li")
+li.innerText=players[item.id].name + " (Turno " + item.turn + ")"
+turnsList.appendChild(li)
+}
+
+document.getElementById("turns").style.display="block"
 
 })
 
@@ -225,22 +258,36 @@ const shuffledWords = roomData.words
 const currentIndex = roomData.roundIndex
 
 const ids = Object.keys(players)
+const totalPlayers = ids.length
 
-const impostorIndex = Math.floor(Math.random()*ids.length)
+const impostorIndex = Math.floor(Math.random()*totalPlayers)
 
 const wordObj = shuffledWords[currentIndex % shuffledWords.length]
+
+// Crear orden de turnos aleatorio
+const turnsArray = ids.slice().sort(() => Math.random() - 0.5)
+const turns = {}
+for(let i = 0; i < turnsArray.length; i++){
+  turns[turnsArray[i]] = i + 1
+}
+
+await set(ref(db, "rooms/"+roomCode+"/turns"), turns)
 
 // Incrementar índice para próxima ronda
 await set(ref(db, "rooms/"+roomCode+"/roundIndex"), currentIndex + 1)
 
-for(let i=0;i<ids.length;i++){
+for(let i=0;i<totalPlayers;i++){
 
 let role = "civil"
-let data = { role: role, word: wordObj.word }
+let data = { role: role, word: wordObj.word, turn: turns[ids[i]], totalPlayers: totalPlayers }
 
 if(i==impostorIndex){
   role="impostor"
-  data = { role: role, hints: wordObj.hints }
+  const playerTurn = turns[ids[i]]
+  const numClues = Math.floor(totalPlayers / 2) - playerTurn + 1
+  // Seleccionar pistas basado en el número de pistas a mostrar
+  let selectedHints = wordObj.hints.slice(0, Math.max(0, numClues))
+  data = { role: role, word: wordObj.word, hints: selectedHints, turn: playerTurn, totalPlayers: totalPlayers, numClues: numClues }
 }
 
 await set(ref(db,"rooms/"+roomCode+"/roles/"+ids[i]), data)
@@ -248,26 +295,6 @@ await set(ref(db,"rooms/"+roomCode+"/roles/"+ids[i]), data)
 }
 
 }
-
-const roleRef = ref(db,"rooms/"+roomCode+"/roles/"+playerId)
-
-onValue(roleRef,(snapshot)=>{
-
-const data = snapshot.val()
-
-if(!data) return
-
-if(data.role=="impostor"){
-
-document.getElementById("role").innerText="⚠️ ERES EL IMPOSTOR"
-
-}else{
-
-document.getElementById("role").innerText="Tu palabra: "+data.word
-
-}
-
-})
 
 </script>
 
