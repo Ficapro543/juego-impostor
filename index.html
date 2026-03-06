@@ -93,6 +93,29 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
+// Arreglo constante de palabras con pistas
+const words = [
+  { word: "Pizza", hints: ["Italiana", "Queso"] },
+  { word: "Hospital", hints: ["Enfermos", "Doctores"] },
+  { word: "Perro", hints: ["Animal", "Mascota"] },
+  { word: "Computadora", hints: ["Tecnología", "Pantalla"] },
+  { word: "Amazonas", hints: ["Río", "Selva"] },
+  { word: "Avión", hints: ["Volar", "Aeropuerto"] },
+  { word: "Escuela", hints: ["Estudiar", "Profesores"] },
+  { word: "Playa", hints: ["Arena", "Mar"] },
+  { word: "Montaña", hints: ["Altura", "Nieve"] },
+  { word: "Coche", hints: ["Ruedas", "Carretera"] }
+];
+
+// Función para barajar arreglo
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
 let roomCode = ""
 let playerId = ""
 let playerName = ""
@@ -106,6 +129,15 @@ if(!playerName) return alert("Pon tu nombre")
 roomCode = Math.floor(1000 + Math.random()*9000)
 
 playerId = Date.now()
+
+// Crear arreglo shuffled de palabras
+const shuffledWords = shuffle([...words]);
+
+await set(ref(db, "rooms/"+roomCode), {
+  players: {},
+  words: shuffledWords,
+  roundIndex: 0
+});
 
 await set(ref(db, "rooms/"+roomCode+"/players/"+playerId),{
 name:playerName
@@ -171,7 +203,7 @@ if(!data) return
 
 if(data.role=="impostor"){
 
-document.getElementById("role").innerText="⚠️ ERES EL IMPOSTOR"
+document.getElementById("role").innerText="⚠️ ERES EL IMPOSTOR\nPistas: " + data.hints.join(", ")
 
 }else{
 
@@ -185,30 +217,33 @@ document.getElementById("role").innerText="Tu palabra: "+data.word
 
 window.startGame = async function(){
 
-const playersSnap = await get(ref(db,"rooms/"+roomCode+"/players"))
+const roomSnap = await get(ref(db,"rooms/"+roomCode))
+const roomData = roomSnap.val()
 
-const players = playersSnap.val()
+const players = roomData.players
+const shuffledWords = roomData.words
+const currentIndex = roomData.roundIndex
 
 const ids = Object.keys(players)
 
 const impostorIndex = Math.floor(Math.random()*ids.length)
 
-const wordList = ["Pizza","Hospital","Perro","Computadora","Amazonas","Avión"]
+const wordObj = shuffledWords[currentIndex % shuffledWords.length]
 
-const word = wordList[Math.floor(Math.random()*wordList.length)]
+// Incrementar índice para próxima ronda
+await set(ref(db, "rooms/"+roomCode+"/roundIndex"), currentIndex + 1)
 
 for(let i=0;i<ids.length;i++){
 
-let role = "word"
+let role = "civil"
+let data = { role: role, word: wordObj.word }
 
-if(i==impostorIndex) role="impostor"
+if(i==impostorIndex){
+  role="impostor"
+  data = { role: role, hints: wordObj.hints }
+}
 
-await set(ref(db,"rooms/"+roomCode+"/roles/"+ids[i]),{
-
-role:role,
-word:word
-
-})
+await set(ref(db,"rooms/"+roomCode+"/roles/"+ids[i]), data)
 
 }
 
